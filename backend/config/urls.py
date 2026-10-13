@@ -30,5 +30,6 @@ urlpatterns = [
     path("api/occupancy/", include("occupancy.urls")),
     path("api/forecasting/", include("forecasting.urls")),
     path("api/demand/", DemandEstimationView.as_view(), name="demand-estimation"),
+    path("api/tasks/", include("tasks.urls")),
 ]
 
