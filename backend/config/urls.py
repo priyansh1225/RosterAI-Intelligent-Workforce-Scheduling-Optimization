@@ -19,10 +19,16 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import include, path
+from forecasting.views import DemandEstimationView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/departments/", include("departments.urls")),
     path("api/employees/", include("employees.urls")),
+    path("api/shifts/", include("scheduling.urls")),
+    path("api/rosters/", include("scheduling.roster_urls")),
+    path("api/occupancy/", include("occupancy.urls")),
+    path("api/forecasting/", include("forecasting.urls")),
+    path("api/demand/", DemandEstimationView.as_view(), name="demand-estimation"),
 ]
 

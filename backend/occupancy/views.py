@@ -1,3 +1,11 @@
-from django.shortcuts import render
+from rest_framework import viewsets
+from rest_framework.permissions import IsAdminUser
 
-# Create your views here.
+from .models import OccupancyRecord
+from .serializers import OccupancyRecordSerializer
+
+
+class OccupancyRecordViewSet(viewsets.ModelViewSet):
+    queryset = OccupancyRecord.objects.all()
+    serializer_class = OccupancyRecordSerializer
+    permission_classes = [IsAdminUser]
