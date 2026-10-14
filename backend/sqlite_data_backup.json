@@ -1,0 +1,126 @@
+[
+{
+  "model": "auth.user",
+  "fields": {
+    "password": "pbkdf2_sha256$1000000$TfYs3qhGr6NoorzsKeK2qE$8BuMiyRkjHbmW3qbrUjsCwt9YsOPbCmBMEV2OGiocNA=",
+    "last_login": null,
+    "is_superuser": true,
+    "username": "Bhatt",
+    "first_name": "",
+    "last_name": "",
+    "email": "priyanshbhatt1428@gmail.com",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2026-10-13T22:19:17.127Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "employees.employee",
+  "pk": 1,
+  "fields": {
+    "employee_code": "EMP001",
+    "full_name": "Demo Employee",
+    "email": "employee@example.com",
+    "phone": "9876543210",
+    "department": 1,
+    "skills": [
+      "room_cleaning",
+      "laundry"
+    ],
+    "is_available": true,
+    "max_weekly_hours": 40,
+    "employment_status": "ACTIVE",
+    "created_at": "2026-10-13T14:32:37.455Z",
+    "updated_at": "2026-10-13T14:32:37.455Z"
+  }
+},
+{
+  "model": "employees.staffrequest",
+  "pk": 1,
+  "fields": {
+    "request_code": "REQ-101",
+    "department": 1,
+    "location": "Floor 2 (Rooms 201-204)",
+    "task_type": "Turnover Cleaning",
+    "required_count": 2,
+    "assigned_count": 0,
+    "assigned_staff": [],
+    "required_skills": [
+      "Room cleaning"
+    ],
+    "priority": "HIGH",
+    "duration_minutes": 60,
+    "deadline": null,
+    "status": "SHORTAGE",
+    "reason": "VIP arrival",
+    "shortage_reason": "",
+    "created_at": "2026-10-13T23:23:15.164Z",
+    "updated_at": "2026-10-13T23:23:15.164Z"
+  }
+},
+{
+  "model": "departments.department",
+  "pk": 1,
+  "fields": {
+    "name": "Housekeeping",
+    "description": "Room cleaning, laundry, and housekeeping operations",
+    "is_active": true
+  }
+},
+{
+  "model": "occupancy.occupancyrecord",
+  "pk": 1,
+  "fields": {
+    "date": "2026-10-14",
+    "total_rooms": 100,
+    "occupied_rooms": 75,
+    "expected_check_ins": 15,
+    "expected_check_outs": 10,
+    "notes": "Test record for demand estimation",
+    "created_at": "2026-10-13T22:47:46.116Z",
+    "updated_at": "2026-10-13T22:47:46.116Z"
+  }
+},
+{
+  "model": "occupancy.room",
+  "pk": 1,
+  "fields": {
+    "room_number": "101",
+    "floor": 1,
+    "room_type": "Deluxe",
+    "status": "ROOM_READY",
+    "assigned_to": "Housekeeping Staff",
+    "last_inspected": "05:14",
+    "updated_at": "2026-10-13T23:44:56.318Z"
+  }
+},
+{
+  "model": "tasks.task",
+  "pk": 1,
+  "fields": {
+    "title": "Test Room Cleaning",
+    "department": "Housekeeping",
+    "location": "Room 101",
+    "assigned_to": "Test Employee",
+    "employee_id": null,
+    "status": "IN_PROGRESS",
+    "priority": "NORMAL",
+    "deadline": null,
+    "notes": "Testing Django database integration",
+    "history": [
+      {
+        "step": "IN_PROGRESS",
+        "at": "2026-10-13T22:57:17.953Z",
+        "by": "Housekeeping",
+        "note": "Status changed to IN PROGRESS."
+      }
+    ],
+    "created_at": "2026-10-13T21:30:34.957Z",
+    "submitted_at": null,
+    "verified_at": null,
+    "verified_by": ""
+  }
+}
+]

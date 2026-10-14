@@ -1,23 +1,25 @@
+
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Users,
-  CalendarDays,
   DoorOpen,
-  AlertTriangle,
   ArrowRight,
-  Sparkles,
   Activity,
   ListChecks,
   CheckCircle2,
   Clock,
-  ShieldCheck,
-  Plus,
 } from 'lucide-react'
+
 import { useData } from '../context/DataContext'
 import { AppLayout } from '../components/AppLayout'
-import { StatCard, Panel, StatusBadge, EmptyState } from '../components/Common'
-import { fmtDate, timeOf, initials } from '../services/api'
+import {
+  StatCard,
+  Panel,
+  StatusBadge,
+  EmptyState,
+} from '../components/Common'
+import { api, timeOf, initials } from '../services/api'
 import { operationsStore } from '../services/operationsStore'
 
 export function HousekeepingDashboard() {
@@ -26,18 +28,26 @@ export function HousekeepingDashboard() {
   const [feedback, setFeedback] = useState('')
 
   const hkStaff = data.employees.filter(
-    (e) => e.department_name?.toLowerCase() === 'housekeeping'
+    (employee) =>
+      employee.department_name?.toLowerCase() === 'housekeeping'
   )
-  const hkTasks = tasks.filter((t) => t.department?.toLowerCase() === 'housekeeping')
-  const hkRequests = requests.filter((r) => r.department?.toLowerCase() === 'housekeeping')
 
-  // Floor stats
-  const floor1Rooms = rooms.filter((r) => r.floor === 1)
-  const floor2Rooms = rooms.filter((r) => r.floor === 2)
-  const floor3Rooms = rooms.filter((r) => r.floor === 3)
+  const hkTasks = tasks.filter(
+    (task) => task.department?.toLowerCase() === 'housekeeping'
+  )
+
+  const hkRequests = requests.filter(
+    (request) =>
+      (
+        request.department_name ||
+        (typeof request.department === 'string'
+          ? request.department
+          : '')
+      ).toLowerCase() === 'housekeeping'
+  )
 
   const awaitingVerification = hkTasks.filter(
-    (t) => t.status === 'SUBMITTED_FOR_VERIFICATION'
+    (task) => task.status === 'SUBMITTED_FOR_VERIFICATION'
   )
 
   const handleVerify = (taskId) => {
@@ -47,8 +57,9 @@ export function HousekeepingDashboard() {
       'Housekeeping Supervisor',
       'Room passed turnover inspection.'
     )
+
     refreshOps()
-    setFeedback(`Task ${taskId} verified as completed! Room status updated.`)
+    setFeedback(`Task ${taskId} verified as completed!`)
     setTimeout(() => setFeedback(''), 4000)
   }
 
@@ -64,6 +75,7 @@ export function HousekeepingDashboard() {
           >
             <Activity size={15} /> Request Staff
           </button>
+
           <button
             className="button button-primary"
             onClick={() => navigate('/housekeeping/room-readiness')}
@@ -80,7 +92,6 @@ export function HousekeepingDashboard() {
         </div>
       )}
 
-      {/* KPI STATS */}
       <div className="stats-grid">
         <StatCard
           label="Housekeeping Staff"
@@ -89,13 +100,18 @@ export function HousekeepingDashboard() {
           icon={Users}
           tone="blue"
         />
+
         <StatCard
           label="Turnover Tasks"
-          value={hkTasks.filter((t) => t.status === 'IN_PROGRESS').length}
+          value={
+            hkTasks.filter((task) => task.status === 'IN_PROGRESS')
+              .length
+          }
           foot="Currently cleaning"
           icon={ListChecks}
           tone="violet"
         />
+
         <StatCard
           label="Awaiting Inspection"
           value={awaitingVerification.length}
@@ -103,9 +119,13 @@ export function HousekeepingDashboard() {
           icon={Clock}
           tone="amber"
         />
+
         <StatCard
           label="Rooms Verified Ready"
-          value={rooms.filter((r) => r.status === 'ROOM_READY').length}
+          value={
+            rooms.filter((room) => room.status === 'ROOM_READY')
+              .length
+          }
           foot={`of ${rooms.length} monitored rooms`}
           icon={CheckCircle2}
           tone="emerald"
@@ -113,7 +133,6 @@ export function HousekeepingDashboard() {
       </div>
 
       <div className="bento-grid">
-        {/* FLOOR-WISE ROOM STATUS (span-8) */}
         <Panel
           title="Floor-Wise Room Turnover Status"
           subtitle="Real-time cleanliness & room preparation status"
@@ -125,25 +144,40 @@ export function HousekeepingDashboard() {
           }
         >
           <div className="rooms-grid">
-            {rooms.slice(0, 6).map((rm) => (
-              <div key={rm.room_number} className={`room-card status-${rm.status.toLowerCase()}`}>
+            {rooms.slice(0, 6).map((room) => (
+              <div
+                key={room.id ?? room.room_number}
+                className={`room-card status-${room.status.toLowerCase()}`}
+              >
                 <div className="room-head">
-                  <b>Room {rm.room_number}</b>
-                  <span className="room-type">{rm.type}</span>
+                  <b>Room {room.room_number}</b>
+                  <span className="room-type">
+                    {room.room_type || room.type || 'Standard'}
+                  </span>
                 </div>
+
                 <div className="room-assignee">
-                  <span>Assigned:</span> <b>{rm.assigned_to || 'Unassigned'}</b>
+                  <span>Assigned:</span>{' '}
+                  <b>{room.assigned_to || 'Unassigned'}</b>
                 </div>
+
                 <div className="room-foot">
-                  <StatusBadge status={rm.status} />
-                  <small>Floor {rm.floor}</small>
+                  <StatusBadge status={room.status} />
+                  <small>Floor {room.floor}</small>
                 </div>
               </div>
             ))}
           </div>
+
+          {rooms.length === 0 && (
+            <EmptyState
+              title="No rooms available"
+              description="Rooms from the database will appear here."
+              icon={DoorOpen}
+            />
+          )}
         </Panel>
 
-        {/* TASKS AWAITING INSPECTION (span-4) */}
         <Panel
           title="Tasks Awaiting Inspection"
           subtitle="Submitted by room attendants"
@@ -151,19 +185,21 @@ export function HousekeepingDashboard() {
         >
           {awaitingVerification.length > 0 ? (
             <div className="awaiting-list">
-              {awaitingVerification.map((t) => (
-                <div key={t.id} className="awaiting-card">
+              {awaitingVerification.map((task) => (
+                <div key={task.id} className="awaiting-card">
                   <div className="awaiting-head">
-                    <b>{t.title}</b>
-                    <small>{t.location}</small>
+                    <b>{task.title}</b>
+                    <small>{task.location}</small>
                   </div>
+
                   <div className="awaiting-meta">
-                    <span>By: {t.assigned_to}</span>
-                    <span>Due: {timeOf(t.deadline)}</span>
+                    <span>By: {task.assigned_to || 'Unassigned'}</span>
+                    <span>Due: {timeOf(task.deadline)}</span>
                   </div>
+
                   <button
                     className="button button-small button-success full-button"
-                    onClick={() => handleVerify(t.id)}
+                    onClick={() => handleVerify(task.id)}
                   >
                     <CheckCircle2 size={13} /> Verify & Approve
                   </button>
@@ -179,7 +215,6 @@ export function HousekeepingDashboard() {
           )}
         </Panel>
 
-        {/* HOUSEKEEPING TEAM (span-7) */}
         <Panel
           title="Department Team & Availability"
           subtitle="Qualified housekeepers on today's roster"
@@ -191,43 +226,64 @@ export function HousekeepingDashboard() {
           }
         >
           <div className="leave-list">
-            {hkStaff.map((p) => (
-              <div key={p.id} className="leave-row">
-                <div className="avatar avatar-soft">{initials(p.full_name)}</div>
+            {hkStaff.map((person) => (
+              <div key={person.id} className="leave-row">
+                <div className="avatar avatar-soft">
+                  {initials(person.full_name)}
+                </div>
+
                 <div>
-                  <b>{p.full_name}</b>
+                  <b>{person.full_name}</b>
                   <small>
-                    {p.employee_code} · Skills: {(p.skills || []).join(', ') || 'Room cleaning'}
+                    {person.employee_code} · Skills:{' '}
+                    {(person.skills || []).join(', ') || 'Room cleaning'}
                   </small>
                 </div>
-                <StatusBadge status={p.is_available ? 'AVAILABLE' : 'UNAVAILABLE'} />
+
+                <StatusBadge
+                  status={
+                    person.is_available ? 'AVAILABLE' : 'UNAVAILABLE'
+                  }
+                />
               </div>
             ))}
           </div>
+
+          {hkStaff.length === 0 && (
+            <EmptyState
+              title="No housekeeping staff found"
+              description="Housekeeping employees will appear here when available in the database."
+              icon={Users}
+            />
+          )}
         </Panel>
 
-        {/* ACTIVE STAFF REQUESTS (span-5) */}
         <Panel
           title="Recent Staff Requests"
-          subtitle="Automatic allocation for floor turnover"
+          subtitle="Staff allocation requests for floor turnover"
           className="span-5"
           action={
-            <Link to="/housekeeping/requests" className="text-action">
+            <Link
+              to="/housekeeping/requests"
+              className="text-action"
+            >
               Manage Requests <ArrowRight size={14} />
             </Link>
           }
         >
           {hkRequests.length > 0 ? (
             <div className="leave-list">
-              {hkRequests.slice(0, 3).map((r) => (
-                <div key={r.id} className="leave-row">
+              {hkRequests.slice(0, 3).map((request) => (
+                <div key={request.id} className="leave-row">
                   <div>
-                    <b>{r.task_type}</b>
+                    <b>{request.task_type}</b>
                     <small>
-                      {r.location} · {r.assigned_count}/{r.required_count} assigned
+                      {request.location} · {request.assigned_count}/
+                      {request.required_count} assigned
                     </small>
                   </div>
-                  <StatusBadge status={r.status} />
+
+                  <StatusBadge status={request.status} />
                 </div>
               ))}
             </div>
@@ -246,7 +302,6 @@ export function HousekeepingDashboard() {
 
 export function HousekeepingFloorsPage() {
   const { rooms } = useData()
-
   const floors = [1, 2, 3]
 
   return (
@@ -255,32 +310,56 @@ export function HousekeepingFloorsPage() {
       pageDescription="Floor-by-floor breakdown of room inventory, cleaning status, and turnover priorities."
     >
       <div className="single-stack">
-        {floors.map((fl) => {
-          const flRooms = rooms.filter((r) => r.floor === fl)
-          const readyCount = flRooms.filter((r) => r.status === 'ROOM_READY').length
+        {floors.map((floor) => {
+          const floorRooms = rooms.filter(
+            (room) => Number(room.floor) === floor
+          )
+
+          const readyCount = floorRooms.filter(
+            (room) => room.status === 'ROOM_READY'
+          ).length
+
           return (
             <Panel
-              key={fl}
-              title={`Floor ${fl} Inventory & Status`}
-              subtitle={`${readyCount} of ${flRooms.length} rooms verified ready`}
+              key={floor}
+              title={`Floor ${floor} Inventory & Status`}
+              subtitle={`${readyCount} of ${floorRooms.length} rooms verified ready`}
             >
               <div className="rooms-grid">
-                {flRooms.map((rm) => (
-                  <div key={rm.room_number} className={`room-card status-${rm.status.toLowerCase()}`}>
+                {floorRooms.map((room) => (
+                  <div
+                    key={room.id ?? room.room_number}
+                    className={`room-card status-${room.status.toLowerCase()}`}
+                  >
                     <div className="room-head">
-                      <b>Room {rm.room_number}</b>
-                      <span className="room-type">{rm.type}</span>
+                      <b>Room {room.room_number}</b>
+                      <span className="room-type">
+                        {room.room_type || room.type || 'Standard'}
+                      </span>
                     </div>
+
                     <div className="room-assignee">
-                      <span>Attendant:</span> <b>{rm.assigned_to || 'Unassigned'}</b>
+                      <span>Attendant:</span>{' '}
+                      <b>{room.assigned_to || 'Unassigned'}</b>
                     </div>
+
                     <div className="room-foot">
-                      <StatusBadge status={rm.status} />
-                      <small>Inspected: {rm.last_inspected}</small>
+                      <StatusBadge status={room.status} />
+                      <small>
+                        Inspected: {room.last_inspected || 'None'}
+                      </small>
                     </div>
                   </div>
                 ))}
               </div>
+
+              {floorRooms.length === 0 && (
+                <EmptyState
+                  title="No rooms on this floor"
+                  description="Rooms assigned to this floor will appear here."
+                  icon={DoorOpen}
+                />
+              )}
             </Panel>
           )
         })}
@@ -292,23 +371,65 @@ export function HousekeepingFloorsPage() {
 export function RoomReadinessPage() {
   const { rooms, refreshOps } = useData()
   const [feedback, setFeedback] = useState('')
+  const [verifyingRoomId, setVerifyingRoomId] = useState(null)
 
   const stages = [
-    { num: 1, title: 'Request Created', desc: 'Front Desk dispatches room turnover' },
-    { num: 2, title: 'Staff Assigned', desc: 'Eligible housekeeper auto-allocated' },
-    { num: 3, title: 'In Progress', desc: 'Cleaning and amenities restocked' },
-    { num: 4, title: 'Awaiting Verification', desc: 'Attendant submits for inspection' },
-    { num: 5, title: 'Room Ready', desc: 'Supervisor inspects and marks ready' },
+    {
+      num: 1,
+      title: 'Request Created',
+      desc: 'Front Desk dispatches room turnover',
+    },
+    {
+      num: 2,
+      title: 'Staff Assigned',
+      desc: 'Eligible housekeeper allocated',
+    },
+    {
+      num: 3,
+      title: 'In Progress',
+      desc: 'Cleaning and amenities restocked',
+    },
+    {
+      num: 4,
+      title: 'Awaiting Verification',
+      desc: 'Attendant submits for inspection',
+    },
+    {
+      num: 5,
+      title: 'Room Ready',
+      desc: 'Supervisor inspects and marks ready',
+    },
   ]
 
-  const handleVerifyRoom = (roomNum) => {
-    operationsStore.updateRoom(roomNum, {
-      status: 'ROOM_READY',
-      last_inspected: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    })
-    refreshOps()
-    setFeedback(`Room ${roomNum} marked as ROOM READY!`)
-    setTimeout(() => setFeedback(''), 4000)
+  const handleVerifyRoom = async (room) => {
+    setVerifyingRoomId(room.id)
+    setFeedback('')
+
+    try {
+      const inspectedAt = new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+
+      await api(`/occupancy/rooms/${room.id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'ROOM_READY',
+          last_inspected: inspectedAt,
+        }),
+      })
+
+      await refreshOps()
+      setFeedback(`Room ${room.room_number} marked as ROOM READY!`)
+    } catch (error) {
+      console.error('Failed to verify room:', error)
+      setFeedback(
+        `Could not verify room ${room.room_number}. Please check the server and try again.`
+      )
+    } finally {
+      setVerifyingRoomId(null)
+      setTimeout(() => setFeedback(''), 4000)
+    }
   }
 
   return (
@@ -323,33 +444,39 @@ export function RoomReadinessPage() {
         </div>
       )}
 
-      {/* 5-STAGE WORKFLOW PIPELINE */}
       <div className="bento-grid">
         <Panel
           title="Mandatory Room Readiness Lifecycle"
-          subtitle="Enforced operational process prevents premature guest check-in"
+          subtitle="Operational process for room turnover and verification"
           className="span-12"
         >
           <div className="readiness-flow">
-            {stages.map((st, idx) => (
-              <div key={st.title} className="readiness-step">
-                <span className={`step-number ${st.num === 5 ? 'step-complete' : ''}`}>
-                  {st.num}
+            {stages.map((stage, index) => (
+              <div key={stage.title} className="readiness-step">
+                <span
+                  className={`step-number ${
+                    stage.num === 5 ? 'step-complete' : ''
+                  }`}
+                >
+                  {stage.num}
                 </span>
+
                 <div>
-                  <b>{st.title}</b>
-                  <small>{st.desc}</small>
+                  <b>{stage.title}</b>
+                  <small>{stage.desc}</small>
                 </div>
-                {idx < stages.length - 1 && <ArrowRight size={15} color="#9aa5b7" />}
+
+                {index < stages.length - 1 && (
+                  <ArrowRight size={15} color="#9aa5b7" />
+                )}
               </div>
             ))}
           </div>
         </Panel>
 
-        {/* CURRENT MONITORED ROOMS */}
         <Panel
           title="Current Monitored Rooms"
-          subtitle="Real-time verification states"
+          subtitle="Room status loaded from Django"
           className="span-12"
         >
           <div className="table-wrap">
@@ -365,31 +492,45 @@ export function RoomReadinessPage() {
                   <th>Supervisor Sign-off</th>
                 </tr>
               </thead>
+
               <tbody>
-                {rooms.map((rm) => (
-                  <tr key={rm.room_number}>
-                    <td><b>Room {rm.room_number}</b></td>
-                    <td>Floor {rm.floor}</td>
-                    <td>{rm.type}</td>
-                    <td>{rm.assigned_to || 'None'}</td>
-                    <td>{rm.last_inspected}</td>
+                {rooms.map((room) => (
+                  <tr key={room.id ?? room.room_number}>
                     <td>
-                      <StatusBadge status={rm.status} />
+                      <b>Room {room.room_number}</b>
                     </td>
+                    <td>Floor {room.floor}</td>
+                    <td>{room.room_type || room.type || 'Standard'}</td>
+                    <td>{room.assigned_to || 'None'}</td>
+                    <td>{room.last_inspected || 'None'}</td>
+
                     <td>
-                      {rm.status === 'AWAITING_VERIFICATION' ? (
+                      <StatusBadge status={room.status} />
+                    </td>
+
+                    <td>
+                      {room.status === 'AWAITING_VERIFICATION' ? (
                         <button
                           className="button button-small button-success"
-                          onClick={() => handleVerifyRoom(rm.room_number)}
+                          disabled={verifyingRoomId === room.id}
+                          onClick={() => handleVerifyRoom(room)}
                         >
-                          <CheckCircle2 size={13} /> Verify Room Ready
+                          {verifyingRoomId === room.id ? (
+                            'Saving...'
+                          ) : (
+                            <>
+                              <CheckCircle2 size={13} /> Verify Room Ready
+                            </>
+                          )}
                         </button>
-                      ) : rm.status === 'ROOM_READY' ? (
+                      ) : room.status === 'ROOM_READY' ? (
                         <span className="verified-text">
                           <CheckCircle2 size={13} color="#16865c" /> Verified
                         </span>
                       ) : (
-                        <span className="pending-text">In Progress</span>
+                        <span className="pending-text">
+                          In Progress
+                        </span>
                       )}
                     </td>
                   </tr>
@@ -397,6 +538,14 @@ export function RoomReadinessPage() {
               </tbody>
             </table>
           </div>
+
+          {rooms.length === 0 && (
+            <EmptyState
+              title="No rooms found"
+              description="Create rooms through the Django Rooms API to see them here."
+              icon={DoorOpen}
+            />
+          )}
         </Panel>
       </div>
     </AppLayout>

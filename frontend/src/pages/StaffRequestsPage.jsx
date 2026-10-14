@@ -1,97 +1,113 @@
+
 import React, { useState } from 'react'
 import {
   Activity,
   Plus,
-  Users,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  Sparkles,
   ArrowRight,
-  Filter,
 } from 'lucide-react'
 import { useData } from '../context/DataContext'
-import { useAuth } from '../context/AuthContext'
 import { AppLayout } from '../components/AppLayout'
 import { Panel, StatusBadge, EmptyState } from '../components/Common'
-import { operationsStore } from '../services/operationsStore'
-import { fmtDate, timeOf } from '../services/api'
+import { api, timeOf } from '../services/api'
+
+const INITIAL_FORM = {
+  department: 'Housekeeping',
+  location: '',
+  task_type: 'Room Cleaning & Turnover',
+  required_count: 2,
+  required_skills: '',
+  priority: 'HIGH',
+  duration_minutes: 60,
+  deadline: '',
+  reason: '',
+}
 
 export function StaffRequestsPage({ departmentScope }) {
-  const { data, requests, refreshOps } = useData()
+  const { data, requests, refreshRequests } = useData()
+
   const [showModal, setShowModal] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const [form, setForm] = useState({
+    ...INITIAL_FORM,
     department: departmentScope || 'Housekeeping',
-    location: '',
-    task_type: 'Room Cleaning & Turnover',
-    required_count: 2,
-    required_skills: '',
-    priority: 'HIGH',
-    duration_minutes: 60,
-    deadline: '',
-    reason: '',
   })
 
   const filteredRequests = departmentScope
-    ? requests.filter((r) => r.department?.toLowerCase() === departmentScope.toLowerCase())
+    ? requests.filter(
+        (request) =>
+          (request.department_name || request.department?.name || '')
+            .toLowerCase() === departmentScope.toLowerCase(),
+      )
     : requests
 
-  const handleCreateRequest = (e) => {
-    e.preventDefault()
+  async function handleCreateRequest(event) {
+    event.preventDefault()
+    setSaving(true)
+    setFeedback('')
+
     try {
+      const department = data.departments.find(
+        (item) => item.name === form.department,
+      )
+
+      if (!department) {
+        throw new Error(
+          `Department "${form.department}" was not found. Check your departments in Django.`,
+        )
+      }
+
       const skillsArray = form.required_skills
         .split(',')
-        .map((s) => s.trim())
+        .map((skill) => skill.trim())
         .filter(Boolean)
 
-      const dl = form.deadline
+      const deadline = form.deadline
         ? new Date(form.deadline).toISOString()
         : new Date(Date.now() + 60 * 60000).toISOString()
 
-      const created = operationsStore.createRequest(
-        {
-          ...form,
+      const created = await api('/employees/staff-requests/', {
+        method: 'POST',
+        body: JSON.stringify({
+          department: department.id,
+          location: form.location.trim(),
+          task_type: form.task_type.trim(),
+          required_count: Number(form.required_count),
           required_skills: skillsArray,
-          deadline: dl,
-        },
-        data.employees
-      )
-
-      refreshOps()
-      setShowModal(false)
-      setForm({
-        department: departmentScope || 'Housekeeping',
-        location: '',
-        task_type: 'Room Cleaning & Turnover',
-        required_count: 2,
-        required_skills: '',
-        priority: 'HIGH',
-        duration_minutes: 60,
-        deadline: '',
-        reason: '',
+          priority: form.priority,
+          duration_minutes: Number(form.duration_minutes),
+          deadline,
+          reason: form.reason.trim(),
+        }),
       })
 
-      if (created.shortage === 0) {
-        setFeedback(
-          `Request ${created.id} fully allocated! ${created.assigned_count} qualified staff assigned automatically.`
-        )
-      } else {
-        setFeedback(
-          `Request ${created.id}: Allocated ${created.assigned_count} staff. ${created.shortage_reason}`
-        )
-      }
-      setTimeout(() => setFeedback(''), 5000)
-    } catch (err) {
-      setFeedback(`Error: ${err.message}`)
+      await refreshRequests()
+
+      setShowModal(false)
+      setForm({
+        ...INITIAL_FORM,
+        department: departmentScope || 'Housekeeping',
+      })
+
+      setFeedback(
+        `Request ${created.request_code} saved successfully to Django. Staff allocation is not yet automated by the backend.`,
+      )
+    } catch (error) {
+      setFeedback(`Error: ${error.message}`)
+    } finally {
+      setSaving(false)
     }
   }
 
   return (
     <AppLayout
-      pageTitle={departmentScope ? `${departmentScope} Staff Requests` : 'Operational Staff Requests'}
-      pageDescription="Supervisor staff request workflow with instant automatic allocation based on skills, shifts, and availability."
+      pageTitle={
+        departmentScope
+          ? `${departmentScope} Staff Requests`
+          : 'Operational Staff Requests'
+      }
+      pageDescription="Create and review staffing requests stored in the Django database."
       actions={
         <button
           className="button button-primary"
@@ -102,17 +118,20 @@ export function StaffRequestsPage({ departmentScope }) {
       }
     >
       {feedback && (
-        <div className={`toast-banner ${feedback.includes('Allocated') || feedback.includes('fully') ? 'success' : 'error'}`}>
+        <div
+          className={`toast-banner ${
+            feedback.startsWith('Error:') ? 'error' : 'success'
+          }`}
+        >
           <span>{feedback}</span>
           <button onClick={() => setFeedback('')}>×</button>
         </div>
       )}
 
-      {/* AUTOMATIC ALLOCATION SUMMARY */}
       <div className="bento-grid">
         <Panel
-          title="Automatic Staff Allocation Engine"
-          subtitle="Real-time matching algorithm evaluates 7 hard operational constraints"
+          title="Staff Request Workflow"
+          subtitle="Requests are persisted through the Django REST API."
           className="span-12"
         >
           <div className="engine-steps-bar">
@@ -120,40 +139,31 @@ export function StaffRequestsPage({ departmentScope }) {
               <span className="step-num">1</span>
               <div>
                 <b>Supervisor Request</b>
-                <small>Location, count & required skills</small>
+                <small>Location, headcount and skills</small>
               </div>
             </div>
             <ArrowRight size={16} color="#8a94a5" />
             <div className="engine-step">
               <span className="step-num">2</span>
               <div>
-                <b>Eligibility Filtering</b>
-                <small>Department, active shift & rest</small>
+                <b>Database Storage</b>
+                <small>Request saved in Django</small>
               </div>
             </div>
             <ArrowRight size={16} color="#8a94a5" />
             <div className="engine-step">
               <span className="step-num">3</span>
               <div>
-                <b>Auto-Dispatch</b>
-                <small>Assigned instantly to employee tasklist</small>
-              </div>
-            </div>
-            <ArrowRight size={16} color="#8a94a5" />
-            <div className="engine-step">
-              <span className="step-num">4</span>
-              <div>
-                <b>Shortage Resolution</b>
-                <small>Bottlenecks explained with no admin block</small>
+                <b>Staff Allocation</b>
+                <small>Backend allocation is a future step</small>
               </div>
             </div>
           </div>
         </Panel>
 
-        {/* REQUESTS LIST (span-12) */}
         <Panel
-          title="Staffing Requests & Allocation Status"
-          subtitle={`${filteredRequests.length} operational requests recorded`}
+          title="Staffing Requests"
+          subtitle={`${filteredRequests.length} database requests`}
           className="span-12"
         >
           {filteredRequests.length > 0 ? (
@@ -168,75 +178,106 @@ export function StaffRequestsPage({ departmentScope }) {
                     <th>Assigned Staff</th>
                     <th>Priority</th>
                     <th>Deadline</th>
-                    <th>Allocation Status</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRequests.map((req) => (
-                    <tr key={req.id}>
-                      <td><b>{req.id}</b></td>
-                      <td>
-                        <div className="person-cell">
-                          <div>
-                            <b>{req.department}</b>
-                            <small>{req.location}</small>
+                  {filteredRequests.map((request) => {
+                    const assignedStaff = Array.isArray(
+                      request.assigned_staff,
+                    )
+                      ? request.assigned_staff
+                      : []
+
+                    return (
+                      <tr key={request.id}>
+                        <td>
+                          <b>{request.request_code || `REQ-${request.id}`}</b>
+                        </td>
+                        <td>
+                          <div className="person-cell">
+                            <div>
+                              <b>
+                                {request.department_name ||
+                                  request.department?.name ||
+                                  'Department'}
+                              </b>
+                              <small>{request.location}</small>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td>
-                        <b>{req.task_type}</b>
-                        <small>{req.reason}</small>
-                      </td>
-                      <td>
-                        <b>{req.assigned_count} / {req.required_count}</b>
-                      </td>
-                      <td>
-                        {req.assigned_staff?.length > 0 ? (
-                          <div className="assigned-avatars">
-                            {req.assigned_staff.map((name) => (
-                              <span key={name} className="staff-pill">
-                                {name}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="unfilled-pill">Unfilled</span>
-                        )}
-                      </td>
-                      <td>
-                        <span className={`priority-tag priority-${req.priority.toLowerCase()}`}>
-                          {req.priority}
-                        </span>
-                      </td>
-                      <td>{timeOf(req.deadline)}</td>
-                      <td>
-                        <StatusBadge status={req.status} />
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td>
+                          <b>{request.task_type}</b>
+                          <small>{request.reason}</small>
+                        </td>
+                        <td>
+                          <b>
+                            {request.assigned_count || 0} /{' '}
+                            {request.required_count}
+                          </b>
+                        </td>
+                        <td>
+                          {assignedStaff.length > 0 ? (
+                            <div className="assigned-avatars">
+                              {assignedStaff.map((staff, index) => (
+                                <span
+                                  key={`${staff}-${index}`}
+                                  className="staff-pill"
+                                >
+                                  {typeof staff === 'string'
+                                    ? staff
+                                    : staff.full_name || staff.name || 'Staff'}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="unfilled-pill">
+                              Not allocated
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <span
+                            className={`priority-tag priority-${(
+                              request.priority || 'NORMAL'
+                            ).toLowerCase()}`}
+                          >
+                            {request.priority || 'NORMAL'}
+                          </span>
+                        </td>
+                        <td>{timeOf(request.deadline)}</td>
+                        <td>
+                          <StatusBadge status={request.status} />
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
           ) : (
             <EmptyState
-              title="No staff requests filed"
-              description="Click 'New Staff Request' to dispatch staff to an operational area."
+              title="No staff requests found"
+              description="Create a request to store it in the Django database."
               icon={Activity}
             />
           )}
         </Panel>
       </div>
 
-      {/* CREATE REQUEST MODAL */}
       {showModal && (
         <div className="dialog-scrim">
           <div className="dialog-modal">
             <div className="dialog-head">
               <div>
                 <h2>New Staff Request</h2>
-                <p>Submit staffing needs for automatic allocation</p>
+                <p>Submit staffing requirements to Django</p>
               </div>
-              <button className="icon-button" onClick={() => setShowModal(false)}>
+              <button
+                className="icon-button"
+                onClick={() => setShowModal(false)}
+                disabled={saving}
+              >
                 ×
               </button>
             </div>
@@ -248,22 +289,30 @@ export function StaffRequestsPage({ departmentScope }) {
                   <select
                     required
                     value={form.department}
-                    onChange={(e) => setForm({ ...form, department: e.target.value })}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        department: event.target.value,
+                      })
+                    }
                   >
-                    <option value="Housekeeping">Housekeeping</option>
-                    <option value="Front Desk">Front Desk</option>
-                    <option value="Food & Beverage">Food & Beverage</option>
-                    <option value="Kitchen">Kitchen</option>
+                    {data.departments.map((department) => (
+                      <option key={department.id} value={department.name}>
+                        {department.name}
+                      </option>
+                    ))}
                   </select>
                 </label>
+
                 <label>
                   Location / Operational Area
                   <input
                     required
-                    type="text"
                     value={form.location}
-                    onChange={(e) => setForm({ ...form, location: e.target.value })}
-                    placeholder="e.g. Floor 3, Ballroom B, Hot Line"
+                    onChange={(event) =>
+                      setForm({ ...form, location: event.target.value })
+                    }
+                    placeholder="e.g. Floor 3, Ballroom B"
                   />
                 </label>
               </div>
@@ -273,54 +322,70 @@ export function StaffRequestsPage({ departmentScope }) {
                   Task Type
                   <input
                     required
-                    type="text"
                     value={form.task_type}
-                    onChange={(e) => setForm({ ...form, task_type: e.target.value })}
-                    placeholder="e.g. Room Turnover, Banquet Setup"
+                    onChange={(event) =>
+                      setForm({ ...form, task_type: event.target.value })
+                    }
                   />
                 </label>
+
                 <label>
                   Required Staff Count
                   <input
                     required
                     type="number"
                     min="1"
-                    max="10"
+                    max="100"
                     value={form.required_count}
-                    onChange={(e) => setForm({ ...form, required_count: e.target.value })}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        required_count: event.target.value,
+                      })
+                    }
                   />
                 </label>
               </div>
 
               <div className="form-grid">
                 <label>
-                  Priority Level
+                  Priority
                   <select
                     value={form.priority}
-                    onChange={(e) => setForm({ ...form, priority: e.target.value })}
+                    onChange={(event) =>
+                      setForm({ ...form, priority: event.target.value })
+                    }
                   >
+                    <option value="LOW">Low</option>
                     <option value="NORMAL">Normal</option>
-                    <option value="HIGH">High Priority</option>
-                    <option value="URGENT">Urgent (VIP/Critical)</option>
+                    <option value="HIGH">High</option>
+                    <option value="URGENT">Urgent</option>
                   </select>
                 </label>
+
                 <label>
-                  Deadline Time
+                  Deadline
                   <input
                     type="datetime-local"
                     value={form.deadline}
-                    onChange={(e) => setForm({ ...form, deadline: e.target.value })}
+                    onChange={(event) =>
+                      setForm({ ...form, deadline: event.target.value })
+                    }
                   />
                 </label>
               </div>
 
               <label>
-                Required Mandatory Skills (comma-separated)
+                Required Skills (comma-separated)
                 <input
-                  type="text"
                   value={form.required_skills}
-                  onChange={(e) => setForm({ ...form, required_skills: e.target.value })}
-                  placeholder="e.g. Room cleaning, Service, Allergen awareness"
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      required_skills: event.target.value,
+                    })
+                  }
+                  placeholder="Room cleaning, Service"
                 />
               </label>
 
@@ -329,8 +394,10 @@ export function StaffRequestsPage({ departmentScope }) {
                 <textarea
                   rows="2"
                   value={form.reason}
-                  onChange={(e) => setForm({ ...form, reason: e.target.value })}
-                  placeholder="Detail instructions for assigned team..."
+                  onChange={(event) =>
+                    setForm({ ...form, reason: event.target.value })
+                  }
+                  placeholder="Instructions for the assigned team..."
                 />
               </label>
 
@@ -339,11 +406,16 @@ export function StaffRequestsPage({ departmentScope }) {
                   type="button"
                   className="button button-quiet"
                   onClick={() => setShowModal(false)}
+                  disabled={saving}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="button button-primary">
-                  Submit & Auto-Allocate
+                <button
+                  type="submit"
+                  className="button button-primary"
+                  disabled={saving}
+                >
+                  {saving ? 'Saving…' : 'Submit Staff Request'}
                 </button>
               </div>
             </form>

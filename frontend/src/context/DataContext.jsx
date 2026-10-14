@@ -1,4 +1,3 @@
-
 import React, {
   createContext,
   useContext,
@@ -29,43 +28,62 @@ export function DataProvider({ children }) {
 
   const [refreshCount, setRefreshCount] = useState(0)
 
-  // Operations state
   const [tasks, setTasks] = useState([])
   const [requests, setRequests] = useState([])
   const [rooms, setRooms] = useState([])
   const [notifications, setNotifications] = useState([])
 
-  // Refresh general API data
   const reload = useCallback(() => {
     setRefreshCount((count) => count + 1)
   }, [])
 
-  // Load tasks from Django
+  // Load tasks from Django.
   const refreshTasks = useCallback(async () => {
     try {
       const result = await api('/tasks/')
-      console.log('Tasks received from Django:', result)
       setTasks(listData(result))
     } catch (err) {
       console.error('Failed to load tasks from Django:', err)
     }
   }, [])
 
-  // Refresh local operations data and database tasks
-  const refreshOps = useCallback(() => {
-    setRequests(operationsStore.getRequests())
-    setRooms(operationsStore.getRooms())
+  // Load staff requests from Django.
+  const refreshRequests = useCallback(async () => {
+    try {
+      const result = await api('/employees/staff-requests/')
+      setRequests(listData(result))
+    } catch (err) {
+      console.error('Failed to load staff requests from Django:', err)
+    }
+  }, [])
+
+  // Load rooms from Django.
+  const refreshRooms = useCallback(async () => {
+    try {
+      const result = await api('/occupancy/rooms/')
+      setRooms(listData(result))
+    } catch (err) {
+      console.error('Failed to load rooms from Django:', err)
+    }
+  }, [])
+
+  // Refresh operational data.
+  const refreshOps = useCallback(async () => {
     setNotifications(operationsStore.getNotifications())
 
-    refreshTasks()
-  }, [refreshTasks])
+    await Promise.all([
+      refreshTasks(),
+      refreshRequests(),
+      refreshRooms(),
+    ])
+  }, [refreshTasks, refreshRequests, refreshRooms])
 
-  // Load operations data when the provider mounts
+  // Load operational data when the provider mounts.
   useEffect(() => {
     refreshOps()
   }, [refreshOps])
 
-  // Load departments, employees, shifts, rosters, and other API data
+  // Load general application data from Django.
   useEffect(() => {
     let cancelled = false
 
@@ -77,7 +95,6 @@ export function DataProvider({ children }) {
       }))
 
       try {
-        // Use the local calendar date for the demand API.
         const now = new Date()
         const year = now.getFullYear()
         const month = String(now.getMonth() + 1).padStart(2, '0')
@@ -114,9 +131,7 @@ export function DataProvider({ children }) {
           demand: listData(demandResult),
         })
 
-        setStates({
-          loading: false,
-        })
+        setStates({ loading: false })
       } catch (err) {
         if (cancelled) return
 
@@ -136,16 +151,13 @@ export function DataProvider({ children }) {
     }
   }, [refreshCount])
 
-  // Existing reminder policy for locally stored tasks
+  // Keep the existing local reminder policy unchanged for now.
   useEffect(() => {
     const checkReminders = () => {
       try {
         const storedTasks = operationsStore.getTasks()
-        const storedNotifications =
-          operationsStore.getNotifications()
+        const storedNotifications = operationsStore.getNotifications()
 
-        // Keep the existing reminder storage unchanged.
-        // Database task reminders will be integrated separately.
         if (!Array.isArray(storedTasks)) return
         if (!Array.isArray(storedNotifications)) return
       } catch (err) {
@@ -172,6 +184,8 @@ export function DataProvider({ children }) {
         notifications,
         refreshOps,
         refreshTasks,
+        refreshRequests,
+        refreshRooms,
       }}
     >
       {children}

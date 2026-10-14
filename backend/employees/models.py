@@ -116,3 +116,50 @@ class LeaveRequest(models.Model):
 
     def __str__(self):
         return f"{self.employee} — {self.start_date} to {self.end_date}"
+
+
+class StaffRequest(models.Model):
+    class Status(models.TextChoices):
+        FULFILLED = "FULFILLED", "Fulfilled"
+        PARTIAL = "PARTIAL", "Partially Fulfilled"
+        SHORTAGE = "SHORTAGE", "Staff Shortage"
+
+    request_code = models.CharField(max_length=20, unique=True)
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.PROTECT,
+        related_name="staff_requests",
+    )
+    location = models.CharField(max_length=200)
+    task_type = models.CharField(max_length=150)
+    required_count = models.PositiveIntegerField(default=1)
+    assigned_count = models.PositiveIntegerField(default=0)
+    assigned_staff = models.JSONField(default=list, blank=True)
+    required_skills = models.JSONField(default=list, blank=True)
+    priority = models.CharField(
+        max_length=10,
+        choices=[
+            ("LOW", "Low"),
+            ("NORMAL", "Normal"),
+            ("HIGH", "High"),
+            ("URGENT", "Urgent"),
+        ],
+        default="NORMAL",
+    )
+    duration_minutes = models.PositiveIntegerField(default=60)
+    deadline = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+        default=Status.SHORTAGE,
+    )
+    reason = models.CharField(max_length=255, blank=True)
+    shortage_reason = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.request_code} - {self.task_type}"
