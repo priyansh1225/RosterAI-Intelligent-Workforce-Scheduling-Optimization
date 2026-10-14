@@ -20,12 +20,12 @@ import {
   EmptyState,
 } from '../components/Common'
 import { api, timeOf, initials } from '../services/api'
-import { operationsStore } from '../services/operationsStore'
 
 export function HousekeepingDashboard() {
   const { data, tasks, requests, rooms, refreshOps } = useData()
   const navigate = useNavigate()
   const [feedback, setFeedback] = useState('')
+  const [verifyingTaskId, setVerifyingTaskId] = useState(null)
 
   const hkStaff = data.employees.filter(
     (employee) =>
@@ -50,17 +50,30 @@ export function HousekeepingDashboard() {
     (task) => task.status === 'SUBMITTED_FOR_VERIFICATION'
   )
 
-  const handleVerify = (taskId) => {
-    operationsStore.updateTaskStatus(
-      taskId,
-      'VERIFIED_COMPLETED',
-      'Housekeeping Supervisor',
-      'Room passed turnover inspection.'
-    )
+  // Verify tasks through Django, not localStorage.
+  const handleVerify = async (taskId) => {
+    setVerifyingTaskId(taskId)
+    setFeedback('')
 
-    refreshOps()
-    setFeedback(`Task ${taskId} verified as completed!`)
-    setTimeout(() => setFeedback(''), 4000)
+    try {
+      await api(`/tasks/${taskId}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'VERIFIED_COMPLETED',
+        }),
+      })
+
+      await refreshOps()
+      setFeedback(`Task ${taskId} verified and saved successfully!`)
+    } catch (error) {
+      console.error('Task verification failed:', error)
+      setFeedback(
+        `Could not verify task ${taskId}. Check the API and try again.`
+      )
+    } finally {
+      setVerifyingTaskId(null)
+      setTimeout(() => setFeedback(''), 4000)
+    }
   }
 
   return (
@@ -193,15 +206,24 @@ export function HousekeepingDashboard() {
                   </div>
 
                   <div className="awaiting-meta">
-                    <span>By: {task.assigned_to || 'Unassigned'}</span>
+                    <span>
+                      By: {task.assigned_to || 'Unassigned'}
+                    </span>
                     <span>Due: {timeOf(task.deadline)}</span>
                   </div>
 
                   <button
                     className="button button-small button-success full-button"
+                    disabled={verifyingTaskId === task.id}
                     onClick={() => handleVerify(task.id)}
                   >
-                    <CheckCircle2 size={13} /> Verify & Approve
+                    {verifyingTaskId === task.id ? (
+                      'Saving...'
+                    ) : (
+                      <>
+                        <CheckCircle2 size={13} /> Verify & Approve
+                      </>
+                    )}
                   </button>
                 </div>
               ))}
@@ -401,6 +423,7 @@ export function RoomReadinessPage() {
     },
   ]
 
+  // Verify rooms through Django.
   const handleVerifyRoom = async (room) => {
     setVerifyingRoomId(room.id)
     setFeedback('')
@@ -424,7 +447,7 @@ export function RoomReadinessPage() {
     } catch (error) {
       console.error('Failed to verify room:', error)
       setFeedback(
-        `Could not verify room ${room.room_number}. Please check the server and try again.`
+        `Could not verify room ${room.room_number}. Check the server and try again.`
       )
     } finally {
       setVerifyingRoomId(null)
@@ -500,7 +523,9 @@ export function RoomReadinessPage() {
                       <b>Room {room.room_number}</b>
                     </td>
                     <td>Floor {room.floor}</td>
-                    <td>{room.room_type || room.type || 'Standard'}</td>
+                    <td>
+                      {room.room_type || room.type || 'Standard'}
+                    </td>
                     <td>{room.assigned_to || 'None'}</td>
                     <td>{room.last_inspected || 'None'}</td>
 
